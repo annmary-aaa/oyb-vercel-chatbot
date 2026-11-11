@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>OYB AI Wellness Assistant</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+
+</head>
+
+<body>
+
+<div class="app-container">
+
+    <!-- LEFT SIDEBAR -->
+
+    <div class="sidebar">
+
+        <div class="logo-section">
+
+
+            <h2>OYB</h2>
+
+            <p>Own Your Body</p>
+
+        </div>
+
+        <button class="new-chat">
+            + New Chat
+        </button>
+
+        <div class="categories">
+
+            <h3>Wellness Categories</h3>
+
+            <button onclick="sendQuick('hair')">
+                Hair Care
+            </button>
+
+            <button onclick="sendQuick('sleep')">
+                Sleep
+            </button>
+
+            <button onclick="sendQuick('beauty')">
+                Beauty
+            </button>
+
+            <button onclick="sendQuick('energy')">
+                Energy
+            </button>
+
+            <button onclick="sendQuick('health')">
+                General Health
+            </button>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- MAIN CHAT -->
+
+    <div class="chat-area">
+
+        <div class="chat-header">
+
+            <div>
+
+                <h1>
+                    AI Wellness Assistant
+                </h1>
+
+                <p>
+                    Personalized Wellness Recommendations Powered by Gemini AI
+                </p>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- CUSTOMER DETAILS -->
+
+        <p style="font-size:12px;color:#64748B;margin:0 0 10px 2px;">Demo note: this chatbot preview does not save your contact details or chat history.</p>
+
+        <div class="customer-form">
+
+            <input
+                type="text"
+                id="name"
+                placeholder="Enter your Name">
+
+            <input
+                type="email"
+                id="email"
+                placeholder="Enter your Email">
+
+            <input
+                type="text"
+                id="phone"
+                placeholder="Enter your Phone Number">
+
+        </div>
+
+
+
+        <!-- CHAT WINDOW -->
+
+        <div
+            id="chat-box"
+            class="chat-box">
+        </div>
+
+
+
+        <!-- QUICK ACTIONS -->
+
+        <div class="quick-actions">
+
+            <button onclick="sendQuick('Suggest a product')">
+                Suggest Product
+            </button>
+
+            <button onclick="sendQuick('Why this product?')">
+                Why this product?
+            </button>
+
+            <button onclick="sendQuick('How to use')">
+                How to Use
+            </button>
+
+            <button onclick="sendQuick('Side Effects')">
+                Side Effects
+            </button>
+
+            <button onclick="sendQuick('Buy Now')">
+                Buy Now
+            </button>
+
+        </div>
+
+        <!-- INPUT AREA -->
+
+        <div class="input-section">
+
+            <input
+                type="text"
+                id="user-input"
+                placeholder="Ask anything about OYB wellness products...">
+
+            <button
+                class="send-btn"
+                onclick="sendMessage()">
+                Send
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+function addMessage(text, sender){
+
+    let chatBox = document.getElementById("chat-box");
+
+    let msg = document.createElement("div");
+
+    msg.classList.add("message");
+
+    msg.classList.add(sender);
+
+    msg.innerHTML = text;
+
+    chatBox.appendChild(msg);
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+}
+
+
+function sendQuick(text){
+
+    document.getElementById("user-input").value = text;
+
+    sendMessage();
+
+}
+
+
+function sendMessage(){
+
+    let input = document.getElementById("user-input");
+
+    let message = input.value.trim();
+
+    if(message=="") return;
+
+    addMessage(message,"user");
+
+    input.value="";
+
+    addMessage("Thinking...","bot");
+
+    fetch("/get_response",{
+
+        method:"POST",
+
+        headers:{
+            "Content-Type":"application/json"
+        },
+
+        body:JSON.stringify({
+
+            message:message,
+
+            name:document.getElementById("name").value,
+
+            email:document.getElementById("email").value,
+
+            phone:document.getElementById("phone").value
+
+        })
+
+    })
+
+    .then(response=>response.json().then(data=>({ ok: response.ok, data })))
+
+    .then(result=>{
+
+        let chatBox=document.getElementById("chat-box");
+
+        if (chatBox.lastChild) chatBox.lastChild.remove();
+
+        addMessage(result.data.reply || "Sorry, I could not process that message.","bot");
+
+    })
+    .catch(()=>{
+        let chatBox=document.getElementById("chat-box");
+        if (chatBox.lastChild) chatBox.lastChild.remove();
+        addMessage("Unable to connect right now. Please try again.","bot");
+    });
+
+}
+
+
+document.getElementById("user-input").addEventListener("keypress",function(e){
+
+    if(e.key==="Enter"){
+
+        sendMessage();
+
+    }
+
+});
+
+
+document.querySelector(".new-chat").addEventListener("click", function(){
+    document.getElementById("chat-box").innerHTML = "";
+    addMessage("<b>New chat started.</b><br><br>How can I help you explore OYB wellness products?", "bot");
+});
+
+window.onload=function(){
+
+    addMessage(
+
+    "<b>Welcome to OYB AI Wellness Assistant!</b><br><br>Choose a wellness category from the left panel or ask me anything about Hair, Sleep, Beauty, Energy, or General Health.",
+
+    "bot");
+
+};
+
+</script>
+
+</body>
+
+</html>
