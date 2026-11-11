@@ -202,6 +202,39 @@ def get_response():
         if msg in {"hi", "hello", "hey", "good morning", "good afternoon", "good evening", "good evening oyb"}:
             return jsonify({"reply": "👋 Welcome to OYB (Own Your Body)! I can help you explore Hair, Sleep, Beauty, Energy and General Health products. What would you like to know?"})
 
+        # Ingredient-specific questions must be handled BEFORE broad category/product
+        # matching. Otherwise "suggest a product with melatonin" falls into the generic
+        # "which category?" prompt instead of answering the ingredient question.
+        ingredient_terms = [
+            "melatonin", "biotin", "zinc", "nac", "omega-3", "omega 3",
+            "omega three", "vitamin d", "vitamin b12", "magnesium", "collagen",
+            "ashwagandha", "iron", "folic acid", "dha", "epa"
+        ]
+        ingredient_query = any(phrase_in_text(term, msg) for term in ingredient_terms) or any(
+            phrase_in_text(term, msg)
+            for term in ["ingredient", "ingredients", "contains", "contain", "has in it", "have in it", "composition"]
+        )
+        if ingredient_query:
+            # Only assert ingredients explicitly present in the verified product data.
+            if any(phrase_in_text(term, msg) for term in ["biotin", "zinc", "nac"]):
+                return jsonify({"reply":
+                    "The information provided for <b>Good Hair Day</b> lists Biotin, Zinc and NAC. "
+                    "Its listed price is ₹466. For the complete ingredient amounts and label details, "
+                    "please check the product packaging or official product page: "
+                    "<a href='https://oyb.co.in/products/good-hair-day' target='_blank' rel='noopener'>Good Hair Day</a>."
+                })
+            if phrase_in_text("melatonin", msg):
+                return jsonify({"reply":
+                    "You're looking for an OYB product that contains <b>melatonin</b>. "
+                    "I can confirm that OYB's <b>Sleep Wellness</b> product is described as supporting sleep and relaxation, "
+                    "but the product information currently available to me does not list its ingredients. "
+                    "So I cannot confirm that it contains melatonin or recommend it as a melatonin product. "
+                    "Please check the product label or ask OYB support to verify the ingredients: "
+                    "<a href='https://oyb.co.in/products/azzzleep' target='_blank' rel='noopener'>Sleep Wellness product page</a>."
+                })
+            # For other ingredient requests, let Gemini explain the ingredient generally,
+            # while clearly separating general knowledge from confirmed OYB product contents.
+
         # Handle follow-ups against the last product before detecting new concerns.
         last_product_name = session.get("last_product")
         product = next((p for p in products_data if p["name"] == last_product_name), None)
@@ -220,39 +253,70 @@ def get_response():
                 category_names = ", ".join(c.title() for c in categories)
                 return jsonify({"reply": f"<p>I understood you're asking about {category_names}. Here are related OYB products:</p>{cards}"})
 
-        if any(phrase_in_text(term, msg) for term in ["suggest", "recommend", "product", "what do you sell", "catalog", "show products"]):
-            return jsonify({"reply": "Sure! Which area are you interested in: Hair, Sleep, Beauty, Energy/Heart support, or General Health?"})
+        if (not ingredient_query) and any(
+            phrase_in_text(term, msg)
+            for term in ["suggest", "recommend", "product", "what do you sell", "catalog", "show products"]
+        ):
+            return jsonify({"reply":
+                "I can help you find a relevant OYB product. Tell me the concern or goal you have in mind—"
+                "for example, hair support, sleep and relaxation, skin wellness, heart support, or daily nutrition. "
+                "If you're looking for a specific ingredient, tell me its name and I'll check only the ingredient "
+                "information that is verified in the product details."
+            })
 
         if client:
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=(
-                    "You are the OYB (Own Your Body) wellness product assistant. Answer the customer's actual question "
-                    "helpfully and clearly, even if it does not match a product keyword. You may answer general questions, "
-                    "but do not pretend every question is about an OYB product. Use only these verified product facts: "
-                    "Good Hair Day: hair support; label highlights Biotin, Zinc and NAC; listed price ₹466. "
+                    "You are the OYB (Own Your Body) customer wellness assistant. Your job is to answer the customer's "
+                    "actual question, not merely detect keywords. First identify what they are asking, then explain the answer "
+                    "in plain, friendly language. For ordinary informational questions, give a useful explanation in about "
+                    "4-7 sentences, or use short bullet points when that is clearer. Define unfamiliar terms and include a "
+                    "simple example where useful. Do not give one-line generic replies when an explanation is requested. "
+                    "If the question is ambiguous, provide the most likely helpful general answer and ask one focused follow-up "
+                    "question instead of refusing to answer. If you genuinely do not know, say what you can explain and what "
+                    "detail is missing; never pretend to know. You may answer general wellness and everyday informational "
+                    "questions even when no product keyword matches, but politely remind users that you are OYB's wellness assistant "
+                    "when the topic is far outside wellness.\n\n"
+                    "VERIFIED OYB PRODUCT FACTS (do not add unsupported details): "
+                    "Good Hair Day: hair support; the supplied label highlights Biotin, Zinc and NAC; listed price ₹466. "
                     "Sleep Wellness: supports sleep and relaxation; listed price ₹499. "
                     "Beauty Wellness: supports skin wellness; listed price ₹499. "
                     "Omega-3: pure Omega-3 support for a healthy heart; listed price ₹499. "
                     "Daily Top-up Multivitamins: multivitamins for daily energy and immunity support; listed price ₹499. "
-                    "Do not invent ingredients, clinical evidence, benefits, prices, stock, delivery details, dosage, or medical claims. "
-                    "If asked for details not supplied here, say you do not have verified information and direct them to the official "
-                    "product page or OYB support. Never diagnose, prescribe, or claim a supplement treats or cures a disease. "
-                    "For medical symptoms, medication interactions, pregnancy, breastfeeding, allergies, or safety questions, "
-                    "recommend a qualified healthcare professional. If the question is unrelated to wellness, answer briefly "
-                    "if appropriate and politely explain that you are OYB's wellness assistant. Keep the answer concise and natural.\n\n"
+                    "Do not invent ingredients, clinical evidence, product benefits, prices, stock, delivery details, dosage, "
+                    "or medical claims. If asked for unavailable product details, explain that the information is not in the "
+                    "verified product data and direct the customer to the official product page or OYB support. "
+                    "Never diagnose, prescribe, or claim a supplement treats or cures a disease. For symptoms, medication "
+                    "interactions, pregnancy, breastfeeding, allergies, or individual safety, provide general information only "
+                    "and recommend a qualified healthcare professional. Do not state a supplement is universally safe. "
+                    "Be respectful, conversational, specific, and transparent.\n\n"
                     f"Customer question: {user_message}"
                 ),
             )
-            answer = response.text or "I couldn't prepare an answer just now. Please try again or contact OYB support."
+            answer = response.text or (
+                "I can help with that, but I couldn't generate a complete explanation just now. "
+                "In general, it's best to check reliable information and consider your own circumstances. "
+                "Could you rephrase your question or tell me which part you want explained?"
+            )
         else:
-            answer = ("I can help with OYB's Hair, Sleep, Beauty, Energy and General Health products. "
-                      "The AI assistant is temporarily unavailable for questions outside these topics.")
+            answer = (
+                "I can still help with general wellness guidance. A useful starting point is to describe the concern, "
+                "when it happens, and what you have already tried. I can explain general information and help you explore "
+                "the OYB categories—Hair, Sleep, Beauty, Energy and General Health. The AI answer service is not connected "
+                "right now, so I won't guess at details I cannot verify. What would you like to understand?"
+            )
         return jsonify({"reply": answer})
 
-    except Exception:
+    except Exception as exc:
         logging.exception("Chatbot request failed")
-        return jsonify({"reply": "Sorry, something went wrong. Please try again in a moment."}), 500
+        # Give the customer a useful next step even if the Gemini service is unavailable.
+        fallback = (
+            "I understood your question, but the AI answer service is temporarily having trouble. "
+            "I can still help you narrow it down: are you asking about an OYB product, general wellness information, "
+            "or something else? Please try once more in a little while."
+        )
+        return jsonify({"reply": fallback}), 200
 
 
 if __name__ == "__main__":
